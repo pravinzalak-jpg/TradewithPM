@@ -11,9 +11,8 @@ import requests
 
 LOOKBACK_HOURS = int(os.getenv("LOOKBACK_HOURS", "16"))
 MAX_HEADLINES = int(os.getenv("MAX_HEADLINES", "100"))
-GEMINI_MODELS = [m.strip() for m in os.getenv(
-    "GEMINI_MODEL", "gemini-flash-latest,gemini-2.5-flash,gemini-2.0-flash"
-).split(",") if m.strip()]
+GEMINI_MODELS_ENV = [m.strip() for m in os.getenv("GEMINI_MODEL", "").split(",") if m.strip()]
+FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 UA = {"User-Agent": "Mozilla/5.0 (compatible; MorningBriefBot/1.0)"}
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -102,8 +101,35 @@ def fetch_headlines(report=None):
     return items[:MAX_HEADLINES]
 
 
+def discover_models(api_key):
+    """Ask Google which Flash models this key can use right now."""
+    try:
+        r = requests.get(
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+            headers={"x-goog-api-key": api_key}, timeout=30)
+        if not r.ok:
+            print(f"Model list failed: HTTP {r.status_code} {r.text[:200]}", file=sys.stderr)
+            return []
+        names = []
+        for m in r.json().get("models", []):
+            name = m.get("name", "").replace("models/", "")
+            if "generateContent" not in m.get("supportedGenerationMethods", []):
+                continue
+            if "flash" not in name:
+                continue
+            if any(bad in name for bad in ("image", "tts", "live", "audio", "embedding", "robotics", "computer", "preview-0", "exp")):
+                continue
+            names.append(name)
+        # prefer "latest" aliases, then newest-looking names
+        names.sort(key=lambda n: (0 if "latest" in n else 1, "lite" in n, n), reverse=False)
+        return names
+    except Exception as e:
+        print(f"Model list error: {e}", file=sys.stderr)
+        return []
+
+
 def summarize(items):
-    api_key = os.environ["GEMINI_API_KEY"]
+    api_key = os.environ["GEMINI_API_KEY"].strip()
     lines = [f"- [{i['source']}] {i['title']}" for i in items]
     today = datetime.now(IST).strftime("%A, %d %B %Y")
     user_text = f"Date: {today}\nHeadlines from the last {LOOKBACK_HOURS} hours:\n\n" + "\n".join(lines)
@@ -112,36 +138,42 @@ def summarize(items):
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2000},
     }
-    last_error = None
-    for model in GEMINI_MODELS:
+    models = GEMINI_MODELS_ENV or []
+    for m in discover_models(api_key)[:6] + FALLBACK_MODELS:
+        if m not in models:
+            models.append(m)
+    print("Models to try:", models)
+
+    errors = []
+    for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 r = requests.post(url, headers={"x-goog-api-key": api_key}, json=body, timeout=90)
             except requests.RequestException as e:
-                last_error = str(e)
+                errors.append(f"{model}: {type(e).__name__}")
                 time.sleep(5)
                 continue
-            if r.status_code in (429, 500, 503):
-                last_error = f"{model}: HTTP {r.status_code}"
-                time.sleep(15 * (attempt + 1))
+            if r.status_code in (429, 500, 503) and attempt == 0:
+                errors.append(f"{model}: HTTP {r.status_code} (retrying) {r.text[:150]}")
+                time.sleep(20)
                 continue
-            if r.status_code == 404:
-                last_error = f"{model}: model not found"
-                break  # try next model name
             if not r.ok:
-                last_error = f"{model}: HTTP {r.status_code} {r.text[:300]}"
+                errors.append(f"{model}: HTTP {r.status_code} {r.text[:200]}")
                 break
             data = r.json()
             try:
                 parts = data["candidates"][0]["content"]["parts"]
                 text = "".join(p.get("text", "") for p in parts).strip()
             except (KeyError, IndexError):
-                last_error = f"{model}: empty response {str(data)[:300]}"
+                errors.append(f"{model}: empty response {str(data)[:200]}")
                 break
             if text:
+                print(f"Used model: {model}")
                 return text
-    raise RuntimeError(f"Gemini failed. Last error: {last_error}")
+            errors.append(f"{model}: blank text")
+            break
+    raise RuntimeError("Gemini failed. All errors:\n" + "\n".join(errors))
 
 
 def split_message(text, limit=4000):
@@ -181,7 +213,11 @@ def main():
         send_telegram("No fresh headlines found. Feed status:\n" + "\n".join(report))
         return
 
-    digest = summarize(items)
+    try:
+        digest = summarize(items)
+    except Exception as e:
+        send_telegram("Digest failed at the AI step:\n" + str(e)[:3500])
+        raise
     today = datetime.now(IST).strftime("%d %b %Y")
     header = f"Morning Market Digest - {today}\n\n"
     top_links = "\n".join(f"- {i['title']}\n  {i['link']}" for i in items[:5])
