@@ -1,8 +1,35 @@
 {
   "feeds": [
-    {"source": "Moneycontrol", "url": "https://news.google.com/rss/search?q=site:moneycontrol.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"},
-    {"source": "Moneycontrol", "url": "https://news.google.com/rss/search?q=site:moneycontrol.com+stocks+OR+nifty+OR+sensex+when:1d&hl=en-IN&gl=IN&ceid=IN:en"},
-    {"source": "Zee Business", "url": "https://news.google.com/rss/search?q=site:zeebiz.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"},
-    {"source": "NDTV Profit", "url": "https://news.google.com/rss/search?q=site:ndtvprofit.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"}
+    {
+      "source": "Moneycontrol",
+      "kind": "tips",
+      "url": "https://news.google.com/rss/search?q=site:moneycontrol.com+%28stocks+to+buy+OR+buy+OR+sell+OR+target+price+OR+stop+loss+OR+brokerage+OR+technical+pick%29+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "Zee Business",
+      "kind": "tips",
+      "url": "https://news.google.com/rss/search?q=site:zeebiz.com+%28stocks+to+buy+OR+buy+OR+sell+OR+target+price+OR+stop+loss+OR+brokerage+OR+technical+pick%29+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "NDTV Profit",
+      "kind": "tips",
+      "url": "https://news.google.com/rss/search?q=site:ndtvprofit.com+%28stocks+to+buy+OR+buy+OR+sell+OR+target+price+OR+stop+loss+OR+brokerage+OR+technical+pick%29+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "Moneycontrol",
+      "url": "https://news.google.com/rss/search?q=site:moneycontrol.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "Moneycontrol",
+      "url": "https://news.google.com/rss/search?q=site:moneycontrol.com+stocks+OR+nifty+OR+sensex+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "Zee Business",
+      "url": "https://news.google.com/rss/search?q=site:zeebiz.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    },
+    {
+      "source": "NDTV Profit",
+      "url": "https://news.google.com/rss/search?q=site:ndtvprofit.com+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+    }
   ]
 }
