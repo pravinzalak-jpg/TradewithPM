@@ -10,7 +10,7 @@ import feedparser
 import requests
 
 LOOKBACK_HOURS = int(os.getenv("LOOKBACK_HOURS", "16"))
-MAX_HEADLINES = int(os.getenv("MAX_HEADLINES", "100"))
+MAX_HEADLINES = int(os.getenv("MAX_HEADLINES", "150"))
 GEMINI_MODELS_ENV = [m.strip() for m in os.getenv("GEMINI_MODEL", "").split(",") if m.strip()]
 FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 UA = {"User-Agent": "Mozilla/5.0 (compatible; MorningBriefBot/1.0)"}
@@ -19,16 +19,19 @@ IST = timezone(timedelta(hours=5, minutes=30))
 SYSTEM_PROMPT = """You write a concise pre-market news digest for Indian equity markets.
 Rules:
 - Use ONLY the headlines provided. Do not add facts, prices, targets or numbers that are not in them.
-- Do NOT give buy/sell/hold calls, price targets or stop-losses. Report what is in the news and why it may matter.
+- Do NOT give your own buy/sell/hold calls, targets or stop-losses.
+- Headlines marked [TIPS] may contain recommendations by analysts or brokerages. You may REPORT these as "as reported", always naming the analyst or brokerage and the source. Include target price or stop-loss ONLY if it is written in the headline. If the headline has no analyst name, say "analyst not named".
+- Never present a reported tip as your own view or as certain. If tips conflict, say so.
 - If something is unclear or the headlines conflict, say so.
 - Plain text only. No markdown symbols like ** or #. Use simple dashes for bullets.
-- Keep the whole digest under 3000 characters.
+- Keep the whole digest under 3500 characters.
 - After each item, add the source name in brackets, e.g. [Moneycontrol].
 
 Format:
-MARKET MOOD: 2 lines on overall tone (global cues, SGX/GIFT Nifty, FII/DII if mentioned).
-STOCKS IN NEWS: up to 8 items, one line each, with the reason.
-SECTORS TO WATCH: up to 4 lines.
+MARKET MOOD: 2 lines on overall tone (global cues, GIFT Nifty, FII/DII if mentioned).
+ANALYST PICKS (AS REPORTED): up to 8 items. Style: Stock - buy/sell/watch - target/stop-loss if given - by whom [Source]. If none in headlines, write "No analyst picks found in headlines."
+STOCKS IN NEWS: up to 6 items, one line each, with the reason.
+SECTORS TO WATCH: up to 3 lines.
 EVENTS TODAY: results, IPOs, policy or data releases mentioned.
 RISKS: 1-2 lines.
 """
@@ -91,6 +94,7 @@ def fetch_headlines(report=None):
             kept += 1
             items.append({
                 "source": feed["source"],
+                "kind": feed.get("kind", ""),
                 "title": title,
                 "link": e.get("link", ""),
                 "published": published or datetime.now(timezone.utc),
@@ -130,7 +134,7 @@ def discover_models(api_key):
 
 def summarize(items):
     api_key = os.environ["GEMINI_API_KEY"].strip()
-    lines = [f"- [{i['source']}] {i['title']}" for i in items]
+    lines = [f"- [{i['source']}]{' [TIPS]' if i.get('kind') == 'tips' else ''} {i['title']}" for i in items]
     today = datetime.now(IST).strftime("%A, %d %B %Y")
     user_text = f"Date: {today}\nHeadlines from the last {LOOKBACK_HOURS} hours:\n\n" + "\n".join(lines)
     body = {
@@ -223,7 +227,7 @@ def main():
     top_links = "\n".join(f"- {i['title']}\n  {i['link']}" for i in items[:5])
     footer = (
         "\n\nTop headlines:\n" + top_links +
-        "\n\nNews summary only, not investment advice. Verify before acting."
+        "\n\nNews summary. Analyst views are as reported by the sources, not advice or recommendations from this bot. Verify and do your own research."
     )
     message = header + digest + footer
 
