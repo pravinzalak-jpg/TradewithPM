@@ -1,0 +1,10 @@
+{
+  "_note": "Verify each URL opens in your browser and shows XML. Run: python main.py --check-feeds. Replace any that fail with the current RSS link from each site's RSS page.",
+  "feeds": [
+    {"source": "Moneycontrol", "url": "https://www.moneycontrol.com/rss/latestnews.xml"},
+    {"source": "Moneycontrol", "url": "https://www.moneycontrol.com/rss/marketreports.xml"},
+    {"source": "Moneycontrol", "url": "https://www.moneycontrol.com/rss/business.xml"},
+    {"source": "Zee Business", "url": "https://www.zeebiz.com/market-news/feed"},
+    {"source": "NDTV Profit", "url": "https://www.ndtvprofit.com/rss/feed"}
+  ]
+}
