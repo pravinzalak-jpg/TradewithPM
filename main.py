@@ -57,19 +57,28 @@ def check_feeds():
     return ok
 
 
-def fetch_headlines():
+def fetch_headlines(report=None):
+    report = report if report is not None else []
     cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     seen, items = set(), []
     for feed in load_feeds():
+        label = f"{feed['source']} ({'GoogleNews' if 'news.google.com' in feed['url'] else 'direct'})"
         try:
-            r = requests.get(feed["url"], headers=UA, timeout=20)
-            r.raise_for_status()
+            r = requests.get(feed["url"], headers=UA, timeout=25)
+            if r.status_code != 200:
+                report.append(f"{label}: HTTP {r.status_code}")
+                print(report[-1], file=sys.stderr)
+                continue
             parsed = feedparser.parse(r.content)
         except Exception as e:
+            report.append(f"{label}: error {type(e).__name__}")
             print(f"Skipping {feed['url']}: {e}", file=sys.stderr)
             continue
+        total, kept = len(parsed.entries), 0
         for e in parsed.entries:
             title = re.sub(r"\s+", " ", e.get("title", "")).strip()
+            if "news.google.com" in feed["url"]:
+                title = re.sub(r"\s+-\s+[^-]{2,40}$", "", title)
             if not title:
                 continue
             key = re.sub(r"[^a-z0-9]", "", title.lower())[:80]
@@ -80,12 +89,15 @@ def fetch_headlines():
             if published and published < cutoff:
                 continue
             seen.add(key)
+            kept += 1
             items.append({
                 "source": feed["source"],
                 "title": title,
                 "link": e.get("link", ""),
                 "published": published or datetime.now(timezone.utc),
             })
+        report.append(f"{label}: {total} found, {kept} fresh")
+        print(report[-1])
     items.sort(key=lambda x: x["published"], reverse=True)
     return items[:MAX_HEADLINES]
 
@@ -163,9 +175,10 @@ def main():
     if "--check-feeds" in sys.argv:
         sys.exit(0 if check_feeds() else 1)
 
-    items = fetch_headlines()
+    report = []
+    items = fetch_headlines(report)
     if not items:
-        send_telegram("No fresh headlines found from the configured feeds this morning.")
+        send_telegram("No fresh headlines found. Feed status:\n" + "\n".join(report))
         return
 
     digest = summarize(items)
